@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestión de Citas — Grupo C</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+
+<!--
+  index.html — Capa Vista (V en MVC)
+  Responsabilidad: mostrar datos y capturar acciones del usuario.
+  Toda la lógica de negocio está en model.py (Modelo).
+  La comunicación con el servidor es mediante fetch() al controlador (controller.py).
+-->
+
+<style>
+  /* ── Variables y reset ── */
+  :root {
+    --bg:       #0f0f13;
+    --surface:  #17171d;
+    --surface2: #1e1e27;
+    --border:   #2a2a36;
+    --accent:   #6c63ff;
+    --green:    #43d98c;
+    --red:      #ff4d6d;
+    --yellow:   #ffd166;
+    --text:     #e8e8f0;
+    --muted:    #6b6b80;
+    --r:        12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: .04em;
+  }
+  header h1 span { color: var(--accent); }
+  .badge {
+    background: var(--accent);
+    color: #fff;
+    font-size: .7rem;
+    font-weight: 600;
+    padding: .2rem .65rem;
+    border-radius: 20px;
+    letter-spacing: .06em;
+    margin-left: auto;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    gap: .4rem;
+    padding: 1.25rem 2rem .6rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  .tab {
+    padding: .55rem 1.2rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .18s;
+  }
+  .tab:hover { border-color: var(--accent); color: var(--text); }
+  .tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  /* ── Main layout ── */
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 1rem 2rem 4rem;
+  }
+  .panel { display: none; animation: fadeUp .25s ease; }
+  .panel.active { display: block; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 1.6rem;
+    margin-bottom: 1rem;
+  }
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-size: .95rem;
+    font-weight: 700;
+    margin-bottom: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+  }
+  .icon {
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    background: var(--accent);
+    display: grid;
+    place-items: center;
+    font-size: .8rem;
+  }
+
+  /* MVC tags */
+  .mvc-row {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .mvc-tag {
+    font-size: .68rem;
+    font-weight: 600;
+    padding: .18rem .6rem;
+    border-radius: 4px;
+    letter-spacing: .05em;
+  }
+  .mvc-M { background: rgba(67,217,140,.12); color: var(--green); }
+  .mvc-V { background: rgba(108,99,255,.15); color: var(--accent); }
+  .mvc-C { background: rgba(255,209,102,.12); color: var(--yellow); }
+
+  /* ── Form ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
+  .form-group { display: flex; flex-direction: column; gap: .35rem; }
+  .form-group.full { grid-column: 1 / -1; }
+
+  label {
+    font-size: .74rem;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  input, select, textarea {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: .88rem;
+    padding: .6rem .85rem;
+    transition: border-color .18s;
+    width: 100%;
+    outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  input.err, select.err, textarea.err { border-color: var(--red); }
+  select option { background: var(--surface2); }
+  textarea { resize: vertical; min-height: 78px; }
+
+  .ferr {
+    font-size: .73rem;
+    color: var(--red);
+    display: none;
+    margin-top: .1rem;
+  }
+  .ferr.show { display: block; }
+
+  /* ── Buttons ── */
+  .btn-row { display: flex; gap: .6rem; margin-top: 1.1rem; }
+  .btn {
+    padding: .62rem 1.4rem;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: .87rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    transition: all .18s;
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #7b74ff; }
+  .btn-sm { padding: .38rem .85rem; font-size: .78rem; }
+
+  /* ── Alerts ── */
+  .alert {
+    display: none;
+    border-radius: 8px;
+    padding: .8rem 1rem;
+    font-size: .85rem;
+    margin-bottom: .9rem;
+    border-left: 3px solid;
+    animation: fadeUp .2s ease;
+  }
+  .alert.show { display: block; }
+  .a-ok  { background: rgba(67,217,140,.08);  border-color: var(--green);  color: var(--green); }
+  .a-err { background: rgba(255,77,109,.09);  border-color: var(--red);    color: var(--red); }
+  .a-inf { background: rgba(108,99,255,.1);   border-color: var(--accent); color: var(--accent); }
+
+  /* ── Chips ── */
+  .chip {
+    display: inline-block;
+    padding: .18rem .6rem;
+    border-radius: 20px;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+  }
+  .chip-activa    { background: rgba(67,217,140,.15);  color: var(--green); }
+  .chip-cancelada { background: rgba(255,77,109,.15);  color: var(--red); }
+
+  /* ── Result rows ── */
+  .cita-card {
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: .85rem 1.1rem;
+    margin-bottom: .6rem;
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    gap: .5rem 1rem;
+    align-items: start;
+    transition: background .15s;
+  }
+  .cita-card:hover { background: var(--surface2); }
+  .cita-num { font-family: 'Syne', sans-serif; font-size: 1.2rem; color: var(--accent); line-height: 1; padding-top: .15rem; }
+  .cita-nom { font-weight: 600; font-size: .92rem; margin-bottom: .18rem; }
+  .cita-meta { font-size: .78rem; color: var(--muted); }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; border-radius: 9px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+  thead th {
+    background: var(--surface2);
+    padding: .65rem .9rem;
+    text-align: left;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: .75rem .9rem; vertical-align: middle; }
+
+  /* ── Filtros ── */
+  .filters { display: flex; gap: .65rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem; }
+  .filters .form-group { flex: 1; min-width: 140px; margin: 0; }
+
+  /* ── Code block ── */
+  .code-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .9rem 1.1rem;
+    font-family: 'Courier New', monospace;
+    font-size: .78rem;
+    color: var(--muted);
+    white-space: pre;
+    overflow-x: auto;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  /* ── Empty ── */
+  .empty { text-align: center; padding: 2.5rem 1rem; color: var(--muted); font-size: .88rem; }
+
+  @media (max-width: 580px) {
+    .form-grid { grid-template-columns: 1fr; }
+    main { padding: 1rem; }
+    .tabs { padding: 1rem; gap: .3rem; }
+    .tab { padding: .45rem .8rem; font-size: .78rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Gestión de <span>Citas</span></h1>
+  <span class="badge">GRUPO C</span>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="cambiarTab('registrar')">📝 RF-01 Registrar</button>
+  <button class="tab"        onclick="cambiarTab('consultar')">🔍 RF-02 Consultar</button>
+  <button class="tab"        onclick="cambiarTab('agenda')">  📅 RF-05 Agenda</button>
+  <button class="tab"        onclick="cambiarTab('debug')">   🗄 Modelo</button>
+</div>
+
+<main>
+
+  <!-- ══════════════ RF-01: REGISTRAR ══════════════ -->
+  <div class="panel active" id="panel-registrar">
+    <div class="mvc-row">
+      <span class="mvc-tag mvc-V">Vista: formulario de registro</span>
+      <span class="mvc-tag mvc-C">Controlador: POST /api/citas</span>
+      <span class="mvc-tag mvc-M">Modelo: model.guardar()</span>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="icon">📝</div> Registrar nueva cita</div>
+
+      <div id="alerta-reg" class="alert"></div>
+
+      <div class="form-grid">
+        <div class="form-group full">
+          <label for="reg-nombre">Nombre del cliente *</label>
+          <input id="reg-nombre" type="text" placeholder="Ej: María García López" maxlength="100">
+          <span class="ferr" id="ferr-nombre"></span>
+        </div>
+        <div class="form-group">
+          <label for="reg-fecha">Fecha *</label>
+          <input id="reg-fecha" type="date">
+          <span class="ferr" id="ferr-fecha"></span>
+        </div>
+        <div class="form-group">
+          <label for="reg-hora">Hora *</label>
+          <select id="reg-hora">
+            <option value="">— Seleccionar hora —</option>
+          </select>
+          <span class="ferr" id="ferr-hora"></span>
+        </div>
+        <div class="form-group full">
+          <label for="reg-motivo">Motivo *</label>
+          <textarea id="reg-motivo" placeholder="Describa brevemente el motivo..." maxlength="255"></textarea>
+          <span class="ferr" id="ferr-motivo"></span>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="registrarCita()">Registrar cita</button>
+        <button class="btn" onclick="limpiarReg()">Limpiar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ RF-02: CONSULTAR ══════════════ -->
+  <div class="panel" id="panel-consultar">
+    <div class="mvc-row">
+      <span class="mvc-tag mvc-V">Vista: pantalla de búsqueda</span>
+      <span class="mvc-tag mvc-C">Controlador: GET /api/citas/buscar</span>
+      <span class="mvc-tag mvc-M">Modelo: model.buscar()</span>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="icon">🔍</div> Consultar cita</div>
+
+      <div id="alerta-cons" class="alert"></div>
+
+      <div class="filters">
+        <div class="form-group">
+          <label for="cons-id">Buscar por ID</label>
+          <input id="cons-id" type="number" placeholder="Ej: 2" min="1">
+        </div>
+        <div class="form-group" style="flex:2">
+          <label for="cons-nombre">Buscar por nombre</label>
+          <input id="cons-nombre" type="text" placeholder="Ej: Ana">
+        </div>
+        <button class="btn btn-primary" onclick="consultarCita()">Buscar</button>
+      </div>
+
+      <div id="res-consultar"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ RF-05: AGENDA ══════════════ -->
+  <div class="panel" id="panel-agenda">
+    <div class="mvc-row">
+      <span class="mvc-tag mvc-V">Vista: agenda de citas</span>
+      <span class="mvc-tag mvc-C">Controlador: GET /api/citas</span>
+      <span class="mvc-tag mvc-M">Modelo: model.listar()</span>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="icon">📅</div> Agenda de citas</div>
+
+      <div id="alerta-agenda" class="alert"></div>
+
+      <div class="filters">
+        <div class="form-group">
+          <label for="ag-fecha">Filtrar por fecha</label>
+          <input id="ag-fecha" type="date">
+        </div>
+        <div class="form-group">
+          <label for="ag-estado">Estado</label>
+          <select id="ag-estado">
+            <option value="">Todos</option>
+            <option value="activa">Activas</option>
+            <option value="cancelada">Canceladas</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="cargarAgenda()">Filtrar</button>
+        <button class="btn" onclick="limpiarAgenda()">Limpiar</button>
+      </div>
+
+      <div id="res-agenda"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ DEBUG: MODELO ══════════════ -->
+  <div class="panel" id="panel-debug">
+    <div class="mvc-row">
+      <span class="mvc-tag mvc-M">Modelo: estado actual en memoria</span>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="icon">🗄</div> Snapshot del Modelo (GET /api/modelo)</div>
+      <div class="code-block" id="modelo-json">Cargando...</div>
+      <div class="btn-row">
+        <button class="btn btn-sm" onclick="cargarModelo()">Actualizar</button>
+        <button class="btn btn-sm" onclick="resetearDatos()">Reset datos ejemplo</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ════════════════════════════════════════════════════
+//  VISTA (view logic) — index.html
+//  Solo renderiza y llama al backend (controlador).
+//  No contiene lógica de negocio.
+// ════════════════════════════════════════════════════
+
+const API = '';  // mismo origen que Flask
+
+// ── Generar slots de hora ─────────────────────────
+(function generarHoras() {
+  const sel = document.getElementById('reg-hora');
+  for (let h = 8; h < 20; h++) {
+    for (let m of [0, 30]) {
+      const hh = String(h).padStart(2, '0');
+      const mm = String(m).padStart(2, '0');
+      const op = document.createElement('option');
+      op.value = `${hh}:${mm}`;
+      op.textContent = `${hh}:${mm}`;
+      sel.appendChild(op);
+    }
+  }
+  document.getElementById('reg-fecha').min = hoy();
+})();
+
+function hoy() { return new Date().toISOString().split('T')[0]; }
+
+// ── Navegación entre tabs ─────────────────────────
+function cambiarTab(nombre) {
+  const tabs = ['registrar', 'consultar', 'agenda', 'debug'];
+  document.querySelectorAll('.tab').forEach((t, i) =>
+    t.classList.toggle('active', tabs[i] === nombre));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + nombre).classList.add('active');
+  if (nombre === 'agenda') cargarAgenda();
+  if (nombre === 'debug')  cargarModelo();
+}
+
+// ── Helpers de alerta ─────────────────────────────
+function alerta(id, tipo, msg) {
+  const el = document.getElementById(id);
+  el.className = `alert show a-${tipo}`;
+  el.textContent = msg;
+  if (tipo === 'ok') setTimeout(() => el.className = 'alert', 6000);
+}
+function clearAlerta(id) { document.getElementById(id).className = 'alert'; }
+
+// ── Helpers de errores de campo ───────────────────
+function campoError(campo, msg) {
+  const input = document.getElementById('reg-' + campo) || document.getElementById('cons-' + campo);
+  const span  = document.getElementById('ferr-' + campo);
+  if (input) input.classList.toggle('err', !!msg);
+  if (span)  { span.textContent = msg || ''; span.className = msg ? 'ferr show' : 'ferr'; }
+}
+function limpiarErrores() {
+  ['nombre', 'fecha', 'hora', 'motivo'].forEach(f => campoError(f, ''));
+}
+
+// ── Escape HTML (seguridad XSS en la vista) ───────
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Renderizar lista de citas (RF-02) ─────────────
+function renderCitas(lista) {
+  if (!lista.length) return '<div class="empty">No se encontraron citas.</div>';
+  return lista.map(c => `
+    <div class="cita-card">
+      <div class="cita-num">#${c.id}</div>
+      <div>
+        <div class="cita-nom">${esc(c.nombre_cliente)}</div>
+        <div class="cita-meta">
+          📅 ${c.fecha} &nbsp; 🕐 ${c.hora} &nbsp; 📋 ${esc(c.motivo)}
+        </div>
+      </div>
+      <span class="chip chip-${c.estado}">${c.estado}</span>
+    </div>`).join('');
+}
+
+// ── Renderizar tabla (RF-05) ──────────────────────
+function renderTabla(lista) {
+  if (!lista.length) return '<div class="empty">No hay citas con esos filtros.</div>';
+  const filas = lista.map(c => `
+    <tr>
+      <td>#${c.id}</td>
+      <td>${esc(c.nombre_cliente)}</td>
+      <td>${c.fecha}</td>
+      <td>${c.hora}</td>
+      <td>${esc(c.motivo)}</td>
+      <td><span class="chip chip-${c.estado}">${c.estado}</span></td>
+    </tr>`).join('');
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>ID</th><th>Cliente</th><th>Fecha</th>
+          <th>Hora</th><th>Motivo</th><th>Estado</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`;
+}
+
+// ════════════════════════════════════════════════════
+//  RF-01: REGISTRAR CITA
+// ════════════════════════════════════════════════════
+async function registrarCita() {
+  limpiarErrores();
+  clearAlerta('alerta-reg');
+
+  const datos = {
+    nombre_cliente: document.getElementById('reg-nombre').value,
+    fecha:          document.getElementById('reg-fecha').value,
+    hora:           document.getElementById('reg-hora').value,
+    motivo:         document.getElementById('reg-motivo').value,
+  };
+
+  try {
+    const res = await fetch(`${API}/api/citas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(datos),
+    });
+    const d = await res.json();
+
+    if (d.success) {
+      alerta('alerta-reg', 'ok',
+        `✅ Cita #${d.cita.id} registrada — ${d.cita.nombre_cliente} el ${d.cita.fecha} a las ${d.cita.hora}.`);
+      limpiarReg();
+    } else if (d.errores) {
+      // Errores por campo
+      const mapa = {
+        nombre_cliente: 'nombre',
+        fecha: 'fecha',
+        hora:  'hora',
+        motivo: 'motivo',
+      };
+      Object.entries(d.errores).forEach(([k, v]) => campoError(mapa[k] || k, v));
+    } else {
+      alerta('alerta-reg', 'err', d.error || 'Error desconocido.');
+    }
+  } catch {
+    alerta('alerta-reg', 'err', '❌ No se pudo conectar con el servidor.');
+  }
+}
+
+function limpiarReg() {
+  ['reg-nombre', 'reg-fecha', 'reg-motivo'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('reg-hora').value = '';
+  limpiarErrores();
+}
+
+// ════════════════════════════════════════════════════
+//  RF-02: CONSULTAR CITA
+// ════════════════════════════════════════════════════
+async function consultarCita() {
+  clearAlerta('alerta-cons');
+  document.getElementById('res-consultar').innerHTML = '';
+
+  const id     = document.getElementById('cons-id').value.trim();
+  const nombre = document.getElementById('cons-nombre').value.trim();
+
+  if (!id && !nombre) {
+    alerta('alerta-cons', 'err', 'Ingrese un ID o un nombre para buscar.');
+    return;
+  }
+
+  let url = `${API}/api/citas/buscar?`;
+  if (id)     url += `id=${encodeURIComponent(id)}`;
+  else        url += `nombre=${encodeURIComponent(nombre)}`;
+
+  try {
+    const res = await fetch(url);
+    const d   = await res.json();
+
+    if (d.success) {
+      document.getElementById('res-consultar').innerHTML =
+        `<p style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">${d.total} resultado(s)</p>` +
+        renderCitas(d.citas);
+    } else {
+      alerta('alerta-cons', 'err', d.error);
+    }
+  } catch {
+    alerta('alerta-cons', 'err', '❌ No se pudo conectar con el servidor.');
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  RF-05: LISTAR AGENDA
+// ════════════════════════════════════════════════════
+async function cargarAgenda() {
+  clearAlerta('alerta-agenda');
+  document.getElementById('res-agenda').innerHTML =
+    '<div class="empty">Cargando...</div>';
+
+  const fecha  = document.getElementById('ag-fecha').value;
+  const estado = document.getElementById('ag-estado').value;
+
+  let url = `${API}/api/citas?`;
+  if (fecha)  url += `fecha=${fecha}&`;
+  if (estado) url += `estado=${estado}`;
+
+  try {
+    const res = await fetch(url);
+    const d   = await res.json();
+
+    if (d.success) {
+      const info = `<p style="font-size:.78rem;color:var(--muted);margin-bottom:.8rem">
+        ${d.total} cita(s) — orden cronológico</p>`;
+      document.getElementById('res-agenda').innerHTML = info + renderTabla(d.citas);
+    } else {
+      alerta('alerta-agenda', 'err', d.error);
+      document.getElementById('res-agenda').innerHTML = '';
+    }
+  } catch {
+    alerta('alerta-agenda', 'err', '❌ No se pudo conectar con el servidor.');
+    document.getElementById('res-agenda').innerHTML = '';
+  }
+}
+
+function limpiarAgenda() {
+  document.getElementById('ag-fecha').value  = '';
+  document.getElementById('ag-estado').value = '';
+  cargarAgenda();
+}
+
+// ════════════════════════════════════════════════════
+//  DEBUG: SNAPSHOT DEL MODELO
+// ════════════════════════════════════════════════════
+async function cargarModelo() {
+  try {
+    const res = await fetch(`${API}/api/modelo`);
+    const d   = await res.json();
+    document.getElementById('modelo-json').textContent = JSON.stringify(d, null, 2);
+  } catch {
+    document.getElementById('modelo-json').textContent = 'Error al conectar con el servidor.';
+  }
+}
+
+async function resetearDatos() {
+  if (!confirm('¿Resetear los datos de ejemplo?')) return;
+  try {
+    await fetch(`${API}/api/reset`, { method: 'POST' });
+    alerta('alerta-reg', 'inf', 'Datos reseteados correctamente.');
+    cargarModelo();
+  } catch {
+    alert('Error al resetear.');
+  }
+}
+</script>
+</body>
+</html>
