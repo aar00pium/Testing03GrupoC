@@ -1,81 +1,91 @@
 import sqlite3
+import re
 from datetime import datetime
 
 DB = "citas.db"
 
-def conectar():
+def get_conn():
     return sqlite3.connect(DB)
 
+def init_db():
+    with get_conn() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS citas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre_cliente TEXT NOT NULL,
+            fecha TEXT NOT NULL,
+            hora TEXT NOT NULL,
+            motivo TEXT NOT NULL,
+            estado TEXT NOT NULL
+        )
+        """)
 
-def crear_tabla():
-    conn = conectar()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS citas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre_cliente TEXT NOT NULL,
-        fecha TEXT NOT NULL,
-        hora TEXT NOT NULL,
-        motivo TEXT NOT NULL,
-        estado TEXT NOT NULL
-    )
-    """)
-
-    conn.commit()
-    conn.close()
-
-
-# ── VALIDAR ──
 def validar(datos):
-    if not datos:
-        return "JSON vacío"
+    errores = {}
 
-    campos = ["nombre_cliente", "fecha", "hora", "motivo"]
-    for c in campos:
-        if not datos.get(c):
-            return f"Falta {c}"
+    nombre = (datos.get("nombre_cliente") or "").strip()
+    fecha = datos.get("fecha")
+    hora = datos.get("hora")
+    motivo = (datos.get("motivo") or "").strip()
+
+    if not nombre or len(nombre) > 100:
+        errores["nombre_cliente"] = "Nombre inválido"
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", str(fecha)):
+        errores["fecha"] = "Fecha inválida"
+
+    if not re.match(r"^\d{2}:\d{2}$", str(hora)):
+        errores["hora"] = "Hora inválida"
+
+    if not motivo or len(motivo) > 255:
+        errores["motivo"] = "Motivo inválido"
+
+    if errores:
+        return errores
 
     try:
-        datetime.strptime(datos["fecha"], "%Y-%m-%d")
-        datetime.strptime(datos["hora"], "%H:%M")
+        f = datetime.strptime(fecha, "%Y-%m-%d").date()
+        if f < datetime.now().date():
+            errores["fecha"] = "Fecha pasada"
     except:
-        return "Fecha u hora inválida"
+        errores["fecha"] = "Fecha inválida"
 
-    return None
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM citas WHERE fecha=? AND hora=? AND estado='activa'",
+            (fecha, hora)
+        )
+        if cur.fetchone():
+            errores["hora"] = "Horario ocupado"
 
+    return errores
 
-# ── GUARDAR ──
 def guardar(datos):
     error = validar(datos)
     if error:
         return None, error
 
-    conn = conectar()
-    cursor = conn.cursor()
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+        INSERT INTO citas(nombre_cliente, fecha, hora, motivo, estado)
+        VALUES (?, ?, ?, ?, 'activa')
+        """, (
+            datos["nombre_cliente"].strip(),
+            datos["fecha"],
+            datos["hora"],
+            datos["motivo"].strip()
+        ))
+        conn.commit()
 
-    cursor.execute("""
-    INSERT INTO citas (nombre_cliente, fecha, hora, motivo, estado)
-    VALUES (?, ?, ?, ?, 'activa')
-    """, (
-        datos["nombre_cliente"],
-        datos["fecha"],
-        datos["hora"],
-        datos["motivo"]
-    ))
+        return {
+            "id": cur.lastrowid,
+            **datos,
+            "estado": "activa"
+        }, None
 
-    conn.commit()
-    id = cursor.lastrowid
-    conn.close()
-
-    return {"id": id, **datos, "estado": "activa"}, None
-
-
-# ── LISTAR (RF-05 BIEN) ──
 def listar(fecha=None, estado=None):
-    conn = conectar()
-    cursor = conn.cursor()
-
     query = "SELECT * FROM citas WHERE 1=1"
     params = []
 
@@ -89,76 +99,45 @@ def listar(fecha=None, estado=None):
 
     query += " ORDER BY fecha, hora"
 
-    cursor.execute(query, params)
-    datos = cursor.fetchall()
-    conn.close()
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(query, params)
+        rows = cur.fetchall()
 
-    return [
-        {
-            "id": d[0],
-            "nombre_cliente": d[1],
-            "fecha": d[2],
-            "hora": d[3],
-            "motivo": d[4],
-            "estado": d[5]
-        }
-        for d in datos
-    ], None
+    return [dict(zip(
+        ["id","nombre_cliente","fecha","hora","motivo","estado"], r
+    )) for r in rows], None
 
-
-# ── BUSCAR ──
 def buscar(id_cita=None, nombre=None):
-    conn = conectar()
-    cursor = conn.cursor()
+    with get_conn() as conn:
+        cur = conn.cursor()
 
-    if id_cita:
-        cursor.execute("SELECT * FROM citas WHERE id=?", (id_cita,))
-    elif nombre:
-        cursor.execute("SELECT * FROM citas WHERE nombre_cliente LIKE ?", (f"%{nombre}%",))
-    else:
-        return [], "Debe buscar algo"
+        if id_cita:
+            cur.execute("SELECT * FROM citas WHERE id=?", (id_cita,))
+        else:
+            cur.execute("SELECT * FROM citas WHERE nombre_cliente LIKE ?", (f"%{nombre}%",))
 
-    datos = cursor.fetchall()
-    conn.close()
+        rows = cur.fetchall()
 
-    return [
-        {
-            "id": d[0],
-            "nombre_cliente": d[1],
-            "fecha": d[2],
-            "hora": d[3],
-            "motivo": d[4],
-            "estado": d[5]
-        }
-        for d in datos
-    ], None
+    return [dict(zip(
+        ["id","nombre_cliente","fecha","hora","motivo","estado"], r
+    )) for r in rows], None
 
-
-# ── CANCELAR ──
 def cancelar(id_cita):
-    conn = conectar()
-    cursor = conn.cursor()
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE citas SET estado='cancelada' WHERE id=?", (id_cita,))
+        conn.commit()
 
-    cursor.execute("UPDATE citas SET estado='cancelada' WHERE id=?", (id_cita,))
-    conn.commit()
-    conn.close()
+    return True, None
 
-    return {"id": id_cita, "estado": "cancelada"}, None
-
-
-# ── REASIGNAR ──
 def reasignar(id_cita, fecha, hora):
-    conn = conectar()
-    cursor = conn.cursor()
+    if not fecha or not hora:
+        return None, "Datos inválidos"
 
-    cursor.execute("""
-    UPDATE citas SET fecha=?, hora=? WHERE id=?
-    """, (fecha, hora, id_cita))
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE citas SET fecha=?, hora=? WHERE id=?", (fecha, hora, id_cita))
+        conn.commit()
 
-    conn.commit()
-    conn.close()
-
-    return {"id": id_cita, "fecha": fecha, "hora": hora}, None
-
-
-crear_tabla()
+    return True, None
