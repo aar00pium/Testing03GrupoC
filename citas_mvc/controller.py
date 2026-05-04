@@ -75,7 +75,7 @@ def reasignar(id):
     return jsonify({"success": True, "cita": cita})
 
 
-# ── DEBUG (para tu tab Modelo) ───────────────────
+# ── DEBUG  ───────────────────
 @citas_bp.route("/api/modelo", methods=["GET"])
 def modelo():
     citas, _ = model.listar()
