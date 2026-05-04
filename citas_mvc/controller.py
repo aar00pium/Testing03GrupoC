@@ -1,75 +1,95 @@
-"""
-controller.py — Capa Controlador (C en MVC)
-Responsabilidad: recibir las peticiones HTTP, llamar al Modelo
-y devolver la respuesta JSON a la Vista.
-NO contiene lógica de negocio (esa vive en model.py).
-"""
-
 from flask import Blueprint, request, jsonify
 import model
 
 citas_bp = Blueprint("citas", __name__)
 
-
-# ── RF-01: Registrar cita ─────────────────────────────────────
+# ── RF-01: Registrar ─────────────────────────────
 @citas_bp.route("/api/citas", methods=["POST"])
 def registrar():
     datos = request.get_json(silent=True)
 
     if not datos:
-        return jsonify({"success": False, "error": "El cuerpo debe ser JSON válido."}), 400
+        return jsonify({"success": False, "error": "JSON inválido"}), 400
 
-    cita, errores = model.guardar(datos)
-
-    if errores:
-        return jsonify({"success": False, "errores": errores}), 422
-
-    return jsonify({"success": True, "mensaje": "Cita registrada.", "cita": cita}), 201
-
-
-# ── RF-02: Consultar cita ─────────────────────────────────────
-@citas_bp.route("/api/citas/buscar", methods=["GET"])
-def consultar():
-    id_cita = request.args.get("id", "").strip()
-    nombre  = request.args.get("nombre", "").strip()
-
-    resultado, error = model.buscar(
-        id_cita=id_cita or None,
-        nombre=nombre or None,
-    )
+    cita, error = model.guardar(datos)
 
     if error:
-        return jsonify({"success": False, "error": error}), 404 if "No se encontraron" in error else 400
-
-    return jsonify({"success": True, "total": len(resultado), "citas": resultado}), 200
-
-
-# ── RF-05: Listar agenda ──────────────────────────────────────
-@citas_bp.route("/api/citas", methods=["GET"])
-def listar():
-    fecha  = request.args.get("fecha", "").strip() or None
-    estado = request.args.get("estado", "").strip() or None
-
-    resultado, error = model.listar(fecha=fecha, estado=estado)
-
-    if error:
-        return jsonify({"success": False, "error": error}), 422
+        return jsonify({"success": False, "error": error}), 400
 
     return jsonify({
         "success": True,
-        "total":   len(resultado),
-        "citas":   resultado,
-    }), 200
+        "cita": cita
+    }), 201
 
 
-# ── Snapshot del modelo (depuración) ─────────────────────────
+# ── RF-02: Buscar ────────────────────────────────
+@citas_bp.route("/api/citas/buscar", methods=["GET"])
+def buscar():
+    id_cita = request.args.get("id")
+    nombre  = request.args.get("nombre")
+
+    citas, error = model.buscar(id_cita, nombre)
+
+    if error:
+        return jsonify({"success": False, "error": error}), 400
+
+    return jsonify({
+        "success": True,
+        "total": len(citas),
+        "citas": citas
+    })
+
+
+# ── RF-05: Listar agenda ─────────────────────────
+@citas_bp.route("/api/citas", methods=["GET"])
+def listar():
+    fecha  = request.args.get("fecha")
+    estado = request.args.get("estado")
+
+    citas, _ = model.listar(fecha, estado)
+
+    return jsonify({
+        "success": True,
+        "total": len(citas),
+        "citas": citas
+    })
+
+
+# ── Cancelar ─────────────────────────────────────
+@citas_bp.route("/api/citas/cancelar/<int:id>", methods=["PUT"])
+def cancelar(id):
+    cita, _ = model.cancelar(id)
+    return jsonify({"success": True, "cita": cita})
+
+
+# ── Reasignar ────────────────────────────────────
+@citas_bp.route("/api/citas/reasignar/<int:id>", methods=["PUT"])
+def reasignar(id):
+    datos = request.get_json()
+
+    cita, error = model.reasignar(id, datos["fecha"], datos["hora"])
+
+    if error:
+        return jsonify({"success": False, "error": error}), 400
+
+    return jsonify({"success": True, "cita": cita})
+
+
+# ── DEBUG (para tu tab Modelo) ───────────────────
 @citas_bp.route("/api/modelo", methods=["GET"])
-def ver_modelo():
-    return jsonify(model.snapshot()), 200
+def modelo():
+    citas, _ = model.listar()
+    return jsonify({
+        "total": len(citas),
+        "citas": citas
+    })
 
 
-# ── Reset de datos de ejemplo ─────────────────────────────────
+# ── RESET ───────────────────────────────────────
 @citas_bp.route("/api/reset", methods=["POST"])
 def reset():
-    model._seed()
-    return jsonify({"success": True, "mensaje": "Datos reseteados."}), 200
+    import os
+    if os.path.exists("citas.db"):
+        os.remove("citas.db")
+    model.crear_tabla()
+    return jsonify({"success": True})
